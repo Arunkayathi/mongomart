@@ -1,12 +1,9 @@
 /*
   Copyright (c) 2008 - 2016 MongoDB, Inc. <http://mongodb.com>
-
   Licensed under the Apache License, Version 2.0 (the "License");
   you may not use this file except in compliance with the License.
   You may obtain a copy of the License at
-
     http://www.apache.org/licenses/LICENSE-2.0
-
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -23,6 +20,7 @@ function CartDAO(database) {
     "use strict";
 
     this.db = database;
+    this.cartCollection = this.db.collection('cart');
 
 
     this.getCart = function(userId, callback) {
@@ -31,26 +29,16 @@ function CartDAO(database) {
         /*
         * TODO-lab5
         *
-        * LAB #5: Implement the getCart() method.
-        *
+        * LAB #5:
         * Query the "cart" collection by userId and pass the cart to the
         * callback function.
         *
         */
-
-        var userCart = {
-            userId: userId,
-            items: []
-        }
-        var dummyItem = this.createDummyItem();
-        userCart.items.push(dummyItem);
-
-        // TODO-lab5 Replace all code above (in this method).
-
-        // TODO Include the following line in the appropriate
-        // place within your code to pass the userCart to the
-        // callback.
-        callback(userCart);
+        let queryDoc = { "userId": userId };
+        this.cartCollection.findOne(queryDoc, function(err, userCart) {
+            assert.equal(err, null);
+            callback(userCart);
+        });
     }
 
 
@@ -81,10 +69,18 @@ function CartDAO(database) {
          * how cart.itemInCart is used in the mongomart.js app.
          *
          */
-
-        callback(null);
-
-        // TODO-lab6 Replace all code above (in this method).
+        let queryDoc = {
+            "userId": userId,
+            "items._id": itemId
+        };
+        this.cartCollection.findOne(queryDoc, { "items.$": 1 }, function(err, result) {
+            assert.equal(err, null);
+            if (result !== null) {
+                result = result.items[0];
+            }
+            console.log(result);
+            callback(result);
+        });
     }
 
 
@@ -135,9 +131,7 @@ function CartDAO(database) {
             });
 
         /*
-
-          Without all the comments this code looks written as follows.
-
+          Without all the comments this code looks is written as follows.
         this.db.collection("cart").findOneAndUpdate(
             {userId: userId},
             {"$push": {items: item}},
@@ -174,17 +168,32 @@ function CartDAO(database) {
         *
         */
 
-        var userCart = {
+        let queryDoc = {
             userId: userId,
-            items: []
+            "items._id": itemId
+        };
+        let optionsDoc = {
+            upsert: false,
+            returnOriginal: false
+        };
+        // Documents used for the update
+        let updateIncreaseQuantityDoc = {               // quantity !== 0
+                $set: { "items.$.quantity": quantity }
+        };
+        let updateRemoveItemDoc = { $pull: { "items": { _id: itemId } } };  // quantity === 0
+        let updateDoc = {};
+
+        if (quantity === 0) {
+            updateDoc = updateRemoveItemDoc;
+        } else {
+            updateDoc = updateIncreaseQuantityDoc;
         }
-        var dummyItem = this.createDummyItem();
-        dummyItem.quantity = quantity;
-        userCart.items.push(dummyItem);
-        callback(userCart);
 
-        // TODO-lab7 Replace all code above (in this method).
-
+        this.db.collection('cart').findOneAndUpdate(queryDoc, updateDoc, optionsDoc, function(err, result) {
+            assert.equal(err, null);
+            console.log(result);
+            callback(result.value);
+        });
     }
 
     this.createDummyItem = function() {
